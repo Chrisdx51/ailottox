@@ -1,0 +1,85 @@
+name: ai_lotto_generator
+description: "AI Lottery Generator"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # ✨ UI & Visual Effects
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.0
+  glassmorphism_ui: ^0.3.0
+  flutter_blurhash: ^0.8.2
+  confetti: ^0.7.0
+  share_plus: ^7.2.1
+  animated_text_kit: ^4.2.2
+
+  # ✨ Backend + Environment
+  supabase_flutter: ^2.6.0
+  flutter_dotenv: ^5.1.0
+
+  # ✨ Notifications
+  firebase_core: ^2.32.0
+  firebase_messaging: ^14.9.4
+  flutter_local_notifications: ^17.2.1
+
+  # ✨ Video Background Support
+  video_player: ^2.9.1
+
+  # ✨ Networking & Storage
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+
+  # ✨ Subscriptions (VIP)
+  in_app_purchase: ^3.2.0
+
+  # ✨ Google Ads
+  google_mobile_ads: ^5.1.0
+
+  # ✨ Sounds
+  audioplayers: ^6.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+  # Icons + Splash tools
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.8
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/videos/
+    - assets/images/
+    - assets/audio/
+    - .env
+
+# -------------------------------------------------------------
+# ⭐ APP ICON CONFIG (Android + iOS)
+# -------------------------------------------------------------
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo1.png"
+  remove_alpha_ios: true
+
+# -------------------------------------------------------------
+# ⭐ SPLASH SCREEN CONFIG (Android + iOS)
+# -------------------------------------------------------------
+flutter_native_splash:
+  color: "#000000"
+  image: assets/images/logo1.png
+  android: true
+  ios: true
+  fullscreen: true

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "429959273064",
+    "project_id": "ai-loot-x",
+    "storage_bucket": "ai-loot-x.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:429959273064:android:0a8d53a955b0283c5f39dd",
+        "android_client_info": {
+          "package_name": "com.ck.ai_lotto_generator.ai_lotto_generator"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAFmMO7GFlM45gxXH3rwdZlKMINxph2SyA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
