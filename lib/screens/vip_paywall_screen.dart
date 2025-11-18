@@ -30,7 +30,8 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
 
   // 🔑 STEP 1: SET YOUR REAL PRODUCT IDS HERE
   // ANDROID: Google Play subscription product ID
-  static const String _androidVipProductId = 'ailottox_vip_monthly_android';
+  static const String _androidVipProductId = 'ailottoxsub';
+
 
   // iOS: App Store subscription product ID
   static const String _iosVipProductId = 'ailottox_vip_monthly_ios';
