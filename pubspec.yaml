@@ -21,6 +21,16 @@ dependencies:
   confetti: ^0.7.0
   share_plus: ^7.2.1
   animated_text_kit: ^4.2.2
+  webview_flutter: ^4.7.0
+  webview_flutter_android: ^3.14.0
+  visibility_detector: ^0.4.0+2
+  profanity_filter: ^2.0.0
+  flutter_image_compress: ^2.3.0
+  video_thumbnail: ^0.5.3
+
+  url_launcher: ^6.2.5   # ⭐ NEW
+  package_info_plus: 9.0.0
+
 
   # ✨ Backend + Environment
   supabase_flutter: ^2.6.0
@@ -46,6 +56,8 @@ dependencies:
 
   # ✨ Sounds
   audioplayers: ^6.5.1
+  image_picker: ^1.2.1
+
 
 dev_dependencies:
   flutter_test:

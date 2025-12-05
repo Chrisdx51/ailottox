@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
-import '../main.dart'; // for setVipStatus(), isVip
+import '../main.dart'; // isVip, setVipStatus, loadVipStatusFromSupabase, sendVipReceiptToSupabase
 
 class VipPaywallScreen extends StatefulWidget {
   const VipPaywallScreen({super.key});
@@ -28,12 +28,8 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
   List<ProductDetails> _products = [];
   String? _errorMessage;
 
-  // 🔑 STEP 1: SET YOUR REAL PRODUCT IDS HERE
-  // ANDROID: Google Play subscription product ID
+  // REAL PRODUCT IDs
   static const String _androidVipProductId = 'ailottoxsub';
-
-
-  // iOS: App Store subscription product ID
   static const String _iosVipProductId = 'ailottox_vip_monthly_ios';
 
   Set<String> get _kProductIds => Platform.isAndroid
@@ -47,13 +43,12 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
     _purchaseStream = _iap.purchaseStream;
     _subscription = _purchaseStream.listen(
       _onPurchaseUpdated,
-      onError: (Object error) {
+      onError: (error) {
         setState(() {
           _processingPurchase = false;
           _errorMessage = "Purchase error. Please try again.";
         });
       },
-      onDone: () {},
     );
 
     _initStore();
@@ -66,7 +61,7 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
   }
 
   // ----------------------------------------------------------
-  // 🛒 INITIALISE STORE & LOAD PRODUCTS
+  // LOAD STORE PRODUCTS
   // ----------------------------------------------------------
   Future<void> _initStore() async {
     setState(() {
@@ -79,7 +74,7 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
       setState(() {
         _storeAvailable = false;
         _loadingProducts = false;
-        _errorMessage = "Store not available. Check your connection or store setup.";
+        _errorMessage = "Store not available on this device.";
       });
       return;
     }
@@ -87,21 +82,14 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
     final ProductDetailsResponse response =
     await _iap.queryProductDetails(_kProductIds);
 
-    if (response.error != null) {
-      setState(() {
-        _storeAvailable = false;
-        _loadingProducts = false;
-        _errorMessage = "Could not load products. (${response.error!.message})";
-      });
-      return;
-    }
-
-    if (response.productDetails.isEmpty) {
+    if (response.error != null ||
+        response.productDetails.isEmpty ||
+        !mounted) {
       setState(() {
         _storeAvailable = false;
         _loadingProducts = false;
         _errorMessage =
-        "No subscription products found.\nCheck your product IDs in Play Console / App Store.";
+        "Could not load products. Check your product IDs and store setup.";
       });
       return;
     }
@@ -114,15 +102,13 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
   }
 
   // ----------------------------------------------------------
-  // 🧾 HANDLE PURCHASE UPDATES
+  // PURCHASE UPDATE LISTENER
   // ----------------------------------------------------------
   void _onPurchaseUpdated(List<PurchaseDetails> purchaseDetailsList) async {
     for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
       switch (purchaseDetails.status) {
         case PurchaseStatus.pending:
-          setState(() {
-            _processingPurchase = true;
-          });
+          setState(() => _processingPurchase = true);
           break;
 
         case PurchaseStatus.purchased:
@@ -152,64 +138,62 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
   }
 
   // ----------------------------------------------------------
-  // ✅ SUCCESSFUL PURCHASE → TOGGLE VIP + CLOSE PAGE
+  // SUCCESSFUL PURCHASE → VIP ON + SAVE + CLOSE
   // ----------------------------------------------------------
-  Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
+  Future<void> _handleSuccessfulPurchase(
+      PurchaseDetails purchaseDetails) async {
     try {
-      setState(() {
-        _processingPurchase = true;
-      });
+      setState(() => _processingPurchase = true);
 
       final String productId = purchaseDetails.productID;
 
-      // 🔥 VERY IMPORTANT: This is the REAL receipt
       final String purchaseToken =
           purchaseDetails.verificationData.serverVerificationData;
 
-      // 1️⃣ SEND RECEIPT TO SUPABASE (Supabase will verify & set expiry)
+      // TEMP SAFE EXPIRY (prevents VIP flicker)
+      final DateTime tempExpiry =
+      DateTime.now().toUtc().add(const Duration(days: 30));
+
+      // 1️⃣ Send receipt to Supabase
       await sendVipReceiptToSupabase(
         productId: productId,
         purchaseToken: purchaseToken,
-        expiresAt: DateTime.now().toUtc(), // TEMP – backend overwrites this!
+        expiresAt: tempExpiry,
       );
 
-      // 2️⃣ Immediately set local VIP = true (so UI updates instantly)
+      // 2️⃣ Enable VIP locally immediately
       await setVipStatus(
         true,
         productId: productId,
         purchaseToken: purchaseToken,
+        expiresAt: tempExpiry,
       );
 
-      // 3️⃣ Reload VIP from Supabase with the real expiry
+      // 3️⃣ Reload from Supabase for the REAL expiry
       await loadVipStatusFromSupabase();
 
       if (!mounted) return;
 
-      setState(() {
-        _processingPurchase = false;
-      });
+      setState(() => _processingPurchase = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("✨ VIP Activated")),
       );
 
       Navigator.pop(context, true);
-
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
         _processingPurchase = false;
         _errorMessage =
-        "VIP activation error. If you were charged, contact support.";
+        "VIP activation error. If you were charged, please contact support.";
       });
     }
   }
 
-
-
   // ----------------------------------------------------------
-  // 🛒 START PURCHASE FLOW
+  // PURCHASE ACTION
   // ----------------------------------------------------------
   Future<void> _buy(ProductDetails product) async {
     setState(() {
@@ -217,25 +201,40 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
       _errorMessage = null;
     });
 
-    final PurchaseParam purchaseParam = PurchaseParam(productDetails: product);
+    final PurchaseParam purchaseParam =
+    PurchaseParam(productDetails: product);
 
-    // Subscriptions also use buyNonConsumable in in_app_purchase
-    await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+    try {
+      await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+    } catch (e) {
+      setState(() {
+        _processingPurchase = false;
+        _errorMessage = "Purchase failed. Please try again.";
+      });
+    }
   }
 
   // ----------------------------------------------------------
-  // 🔁 RESTORE (especially important on iOS)
+  // RESTORE PURCHASES
   // ----------------------------------------------------------
   Future<void> _restorePurchases() async {
     setState(() {
       _processingPurchase = true;
       _errorMessage = null;
     });
-    await _iap.restorePurchases();
+
+    try {
+      await _iap.restorePurchases();
+    } catch (e) {
+      setState(() {
+        _processingPurchase = false;
+        _errorMessage = "Restore failed. Please try again.";
+      });
+    }
   }
 
   // ----------------------------------------------------------
-  // 🧱 UI
+  // UI
   // ----------------------------------------------------------
   @override
   Widget build(BuildContext context) {
@@ -245,11 +244,11 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // 🌌 Background
+          // BACKGROUND
           Container(
             decoration: const BoxDecoration(
               gradient: RadialGradient(
-                center: Alignment(0.0, -0.2),
+                center: Alignment(0, -0.2),
                 radius: 1.2,
                 colors: [
                   Color(0xFF091020),
@@ -260,7 +259,7 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
             ),
           ),
 
-          // ✨ Shimmer layer
+          // SHIMMER
           const Positioned.fill(
             child: Opacity(
               opacity: 0.25,
@@ -270,10 +269,11 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
 
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 20),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 26, vertical: 20),
               child: Column(
                 children: [
-                  // ◀ Back Button
+                  // BACK BUTTON
                   Align(
                     alignment: Alignment.centerLeft,
                     child: GestureDetector(
@@ -290,7 +290,7 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
 
                   const SizedBox(height: 20),
 
-                  // 💠 Logo
+                  // LOGO
                   Container(
                     width: 130,
                     height: 130,
@@ -312,7 +312,7 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
 
                   const SizedBox(height: 24),
 
-                  // 🌟 Title
+                  // TITLE
                   Text(
                     "Unlock AILottoX VIP",
                     textAlign: TextAlign.center,
@@ -326,8 +326,7 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
                   const SizedBox(height: 12),
 
                   Text(
-                    "Upgrade to VIP for deeper AI-crafted number patterns,\n"
-                        "exclusive visuals and an ad-free experience.",
+                    "Upgrade to VIP for deeper AI-crafted number patterns,\nexclusive visuals and an ad-free experience.",
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
                       fontSize: 13,
@@ -345,14 +344,15 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
                   if (_loadingProducts)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 16),
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child:
+                      CircularProgressIndicator(strokeWidth: 2),
                     )
                   else if (!_storeAvailable || product == null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Text(
                         _errorMessage ??
-                            "Store not ready. Check your store setup and product IDs.",
+                            "Store not ready. Check your product IDs.",
                         textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
                           fontSize: 11,
@@ -361,7 +361,6 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
                       ),
                     )
                   else ...[
-                      // 🧾 Small plan summary card
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(14),
@@ -400,7 +399,7 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              product.price, // already includes currency symbol
+                              product.price,
                               style: GoogleFonts.orbitron(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
@@ -413,20 +412,24 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
 
                       const SizedBox(height: 22),
 
-                      // 💎 Purchase button
+                      // PURCHASE BUTTON
                       GestureDetector(
-                        onTap: _processingPurchase ? null : () => _buy(product),
+                        onTap: _processingPurchase
+                            ? null
+                            : () => _buy(product),
                         child: Opacity(
                           opacity: _processingPurchase ? 0.6 : 1,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(14),
                             child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                              filter: ImageFilter.blur(
+                                  sigmaX: 18, sigmaY: 18),
                               child: Container(
                                 height: 60,
                                 width: double.infinity,
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius:
+                                  BorderRadius.circular(14),
                                   border: Border.all(
                                     color: Colors.white.withOpacity(0.22),
                                     width: 1.2,
@@ -443,16 +446,18 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
                                       ? const SizedBox(
                                     width: 22,
                                     height: 22,
-                                    child: CircularProgressIndicator(
+                                    child:
+                                    CircularProgressIndicator(
                                       strokeWidth: 2,
                                       valueColor:
-                                      AlwaysStoppedAnimation<Color>(
-                                          Colors.white),
+                                      AlwaysStoppedAnimation<
+                                          Color>(Colors.white),
                                     ),
                                   )
                                       : Text(
                                     "Continue • ${product.price}",
-                                    style: GoogleFonts.poppins(
+                                    style:
+                                    GoogleFonts.poppins(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w600,
                                       color: Colors.white,
@@ -467,9 +472,10 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
 
                       const SizedBox(height: 12),
 
-                      // 🔁 Restore
                       GestureDetector(
-                        onTap: _processingPurchase ? null : _restorePurchases,
+                        onTap: _processingPurchase
+                            ? null
+                            : _restorePurchases,
                         child: Text(
                           "Restore purchases",
                           style: GoogleFonts.poppins(
@@ -496,8 +502,7 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
                   const SizedBox(height: 16),
 
                   Text(
-                    "Subscriptions are billed through your ${Platform.isAndroid ? "Google Play" : "App Store"} account.\n"
-                        "No predictions. Entertainment only.",
+                    "Subscriptions are billed through your ${Platform.isAndroid ? "Google Play" : "App Store"} account.\nNo predictions. Entertainment only.",
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
                       fontSize: 9,
@@ -516,7 +521,7 @@ class _VipPaywallScreenState extends State<VipPaywallScreen> {
 }
 
 // -------------------------------------------------------
-// 📦 VIP Features Box
+// VIP FEATURE BOX
 // -------------------------------------------------------
 class _VipFeatureBox extends StatelessWidget {
   const _VipFeatureBox();
@@ -568,7 +573,8 @@ class _VipPoint extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, color: Color(0xFF72FFD6), size: 18),
+          const Icon(Icons.check_circle,
+              color: Color(0xFF72FFD6), size: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -586,7 +592,7 @@ class _VipPoint extends StatelessWidget {
 }
 
 // -------------------------------------------------------
-// ✨ Shimmer
+// GLASS SHIMMER
 // -------------------------------------------------------
 class _GlassShimmer extends StatefulWidget {
   const _GlassShimmer();
@@ -602,10 +608,9 @@ class _GlassShimmerState extends State<_GlassShimmer>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 6),
-    )..repeat();
+    _controller =
+    AnimationController(vsync: this, duration: const Duration(seconds: 6))
+      ..repeat();
   }
 
   @override

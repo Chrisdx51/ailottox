@@ -129,6 +129,7 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
 
   // ⭐ VIP: Cosmic Assisted Mode (UI only for now)
   bool _vipCosmicMode = false;
+  bool get _isVipLogic => isVip;
 
   @override
   void initState() {
@@ -157,7 +158,7 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
     }
 
     // ⭐ Load saved cosmic mode (VIP only)
-    if (isVip) {
+    if (_isVipLogic) {
       _loadVipCosmicMode();
     }
   }
@@ -231,9 +232,9 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
               includeBonus: config.includeBonus,
               bonusRangeMax: config.bonusRangeMax,
               isVip: isVip,
-              // Later we can pass vipMode if we want:
-              // vipMode: (isVip && _vipCosmicMode) ? "vip_cosmic" : null,
             ),
+
+
       ),
     );
   }
@@ -338,7 +339,7 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
         child: Column(
           children: [
             // ⭐ TOP BANNER (VIP-safe)
-            if (!isVip && _isBannerReady)
+            if (!_isVipLogic && _isBannerReady)
               SizedBox(
                 height: _bannerAd!.size.height.toDouble(),
                 width: double.infinity,
@@ -361,11 +362,11 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
                           borderRadius: BorderRadius.circular(28),
                           border: Border.all(
                             color: Colors.white.withOpacity(
-                              isVip ? 0.20 : 0.10,
+                              _isVipLogic ? 0.20 : 0.10,
                             ),
                           ),
                           gradient: LinearGradient(
-                            colors: isVip
+                            colors: _isVipLogic
                                 ? [
                               Colors.white.withOpacity(0.10),
                               Colors.white.withOpacity(0.03),
@@ -385,12 +386,13 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
                               const SizedBox(height: 18),
                               _buildTitle(),
                               const SizedBox(height: 6),
-                              if (isVip) _buildVipBadge(),
-                              if (isVip) const SizedBox(height: 8),
+                              if (_isVipLogic) _buildVipBadge(),
+
+                              if (_isVipLogic) const SizedBox(height: 8),
                               _buildSubtitle(),
                               const SizedBox(height: 22),
-                              if (isVip) _buildCosmicToggle(),
-                              if (isVip) const SizedBox(height: 14),
+                              if (_isVipLogic) _buildCosmicToggle(),
+                              if (_isVipLogic) const SizedBox(height: 14),
                               _buildList(),
                               const SizedBox(height: 26),
 
@@ -433,9 +435,9 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
           borderRadius: BorderRadius.circular(26),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF00FEFC).withOpacity(isVip ? 0.50 : 0.35),
-              blurRadius: isVip ? 32 : 24,
-              spreadRadius: isVip ? 6 : 4,
+              color: const Color(0xFF00FEFC).withOpacity(_isVipLogic ? 0.50 : 0.35),
+              blurRadius: _isVipLogic ? 32 : 24,
+              spreadRadius: _isVipLogic ? 6 : 4,
             ),
           ],
         ),
@@ -489,7 +491,7 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
 
   Widget _buildSubtitle() {
     return Text(
-      isVip
+      _isVipLogic
           ? "Pick a draw and AI Lotto X will generate a personalised set of lucky numbers shaped around your saved profile."
           : "Pick a draw and AI Lotto X will create your lucky numbers. VIP Mode unlocks deeper, richer shaping.",
       textAlign: TextAlign.center,
@@ -564,11 +566,12 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
       children: [
 
         // ---------------------------------------
-        // FREE LOTTERIES ONLY
+        // FREE LOTTERIES
         // ---------------------------------------
         Column(
           children: _freeLotteries.map((lotteryName) {
             final selected = _selectedLottery == lotteryName;
+
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: _VisionGlassSelectable(
@@ -584,11 +587,41 @@ class _LotterySelectionScreenState extends State<LotterySelectionScreen>
           }).toList(),
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 18),
+
+        // ---------------------------------------
+        // VIP LOTTERIES (Show locked if not VIP)
+        // ---------------------------------------
+        Column(
+          children: _vipLotteries.map((lotteryName) {
+            final selected = _selectedLottery == lotteryName;
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: _VisionGlassSelectable(
+                text: lotteryName,
+                selected: selected,
+                locked: !_isVipLogic,   // ⭐ FREE USERS SEE LOCKED
+                vipTag: true,      // ⭐ Shows VIP badge
+                onTap: () {
+                  if (!_isVipLogic) {
+                    _showVipUpsellDialog(); // ⭐ FREE USERS GET UPGRADE POPUP
+                    return;
+                  }
+
+                  // ⭐ VIP user selects normally
+                  setState(() => _selectedLottery = lotteryName);
+                },
+              ),
+            );
+          }).toList(),
+        ),
       ],
     );
   }
 }
+
+
 
 // -------------------------------------------------------
 // 🔵 VisionGlass Selectable Row — FULL FIXED VERSION

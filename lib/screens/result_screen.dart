@@ -49,6 +49,7 @@ class _ResultScreenState extends State<ResultScreen>
   late final AudioPlayer _sfxPlayer;    // small ping
   late final AudioPlayer _voicePlayer;  // ElevenLabs later
   bool _isReading = false;              // is TTS playing?
+  bool _useVipVideo = false;
 
   // AI text
   String _fullAffirmation = "";
@@ -67,6 +68,10 @@ class _ResultScreenState extends State<ResultScreen>
 
   Color get _accentSoft => const Color(0xFF72FFD6);
 
+  // ✅ Logic VIP flag: uses both the passed value AND global isVip
+  bool get _isVipLogic => widget.isVip || isVip;
+
+
   @override
   void initState() {
     super.initState();
@@ -82,9 +87,11 @@ class _ResultScreenState extends State<ResultScreen>
       ..repeat();
 
     _confetti = ConfettiController(duration: const Duration(seconds: 3));
-    _confetti.play();
-// ⭐ VIP Nebula Background Video
-    if (widget.isVip) {
+
+// ⭐ VIP Nebula Background Video (uses real VIP logic)
+    if (_isVipLogic) {
+      _useVipVideo = true;
+
       _bgVideo = VideoPlayerController.asset(
         'assets/video/background.mp4',
         videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
@@ -99,9 +106,20 @@ class _ResultScreenState extends State<ResultScreen>
         });
     }
 
-    _startNumberReveal();
+
+
     _fetchAffirmation();
-    if (widget.isVip) {
+
+// ⭐ Delay number reveal so it starts AFTER the ad + transition
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (mounted) {
+        _startNumberReveal();
+      }
+    });
+
+
+
+    if (_isVipLogic) {
       _fetchVipExplanation();
     }
     // -----------------------------------------
@@ -119,11 +137,11 @@ class _ResultScreenState extends State<ResultScreen>
 
   Future<void> _playCelebrate() async {
     try {
+      await _sfxPlayer.stop();  // reset first
       await _sfxPlayer.play(AssetSource('audio/result_ping.mp3'));
-    } catch (_) {
-      // we silently ignore errors – no crash if audio fails
-    }
+    } catch (_) {}
   }
+
 
 
   @override
@@ -132,9 +150,10 @@ class _ResultScreenState extends State<ResultScreen>
     _confetti.dispose();
     _typeTimer?.cancel();
 
-    if (widget.isVip) {
+    if (_useVipVideo) {
       _bgVideo.dispose();
     }
+
     _sfxPlayer.dispose();    // 🔊 new
     _voicePlayer.dispose();  // 🔊 new
 
@@ -145,15 +164,36 @@ class _ResultScreenState extends State<ResultScreen>
   // 🔢 reveal numbers one by one
   void _startNumberReveal() {
     final total = widget.mainNumbers.length + widget.bonusNumbers.length;
+
     for (int i = 0; i < total; i++) {
-      Future.delayed(Duration(milliseconds: 900 * (i + 1)), () {
+      Future.delayed(Duration(milliseconds: 700 * (i + 1)), () async {
         if (!mounted) return;
+
+        // reveal orb
         setState(() {
           _visibleCount = i + 1;
         });
+
+        // play the soft ball pop
+        try {
+          await _sfxPlayer.play(AssetSource('audio/ball_pop.mp3'));
+        } catch (_) {}
+
+        // ⭐ FINAL NUMBER → play celebration sound
+        if (i == total - 1) {
+          // play celebration sound
+          _playCelebrate();
+
+          // start confetti at the same moment
+          try {
+            _confetti.play();
+          } catch (_) {}
+        }
+
       });
     }
   }
+
 
   Future<void> _autoSaveToHistory() async {
     final prefs = await SharedPreferences.getInstance();
@@ -173,17 +213,17 @@ class _ResultScreenState extends State<ResultScreen>
     saved.insert(0, entry);
 
     // Free users: keep last 10
-// VIP users: unlimited
-    if (!widget.isVip) {
+    // VIP users (from global or passed flag): unlimited
+    if (!_isVipLogic) {
       if (saved.length > 10) {
         saved = saved.sublist(0, 10);
       }
     }
 
-
     // Save back
     await prefs.setStringList("history", saved);
   }
+
 
   // ✨ fetch affirmation from /ailottox/affirmation (streamed text)
   Future<void> _fetchAffirmation() async {
@@ -202,7 +242,8 @@ class _ResultScreenState extends State<ResultScreen>
         "lottery": widget.lotteryName,
         "numbers": widget.mainNumbers,
         "bonus_numbers": widget.bonusNumbers,
-        "mode": widget.isVip ? "vip" : "standard",
+        "mode": _isVipLogic ? "vip" : "standard",
+
       });
 
       final res = await http.post(
@@ -353,7 +394,8 @@ class _ResultScreenState extends State<ResultScreen>
             children: [
 
               // ⭐ STEP 11 — VIP FULLSCREEN VIDEO (BACKGROUND)
-              if (widget.isVip && _videoReady)
+              if (_useVipVideo && _videoReady)
+
                 Positioned.fill(
                   child: FittedBox(
                     fit: BoxFit.cover,
@@ -392,7 +434,7 @@ class _ResultScreenState extends State<ResultScreen>
                           children: [
 
                             // ⭐ STEP 12 — VIP VIDEO INSIDE THE GLASS PANEL
-                            if (widget.isVip && _videoReady)
+                            if (_useVipVideo && _videoReady)
                               Positioned.fill(
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(28),
@@ -416,13 +458,13 @@ class _ResultScreenState extends State<ResultScreen>
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(28),
                                 border: Border.all(
-                                  color: widget.isVip
+                                  color: _isVipLogic
                                       ? const Color(0xFF72FFD6).withOpacity(0.32)
                                       : Colors.white.withOpacity(0.10),
-                                  width: widget.isVip ? 1.4 : 1,
+                                  width: _isVipLogic ? 1.4 : 1,
                                 ),
                                 gradient: LinearGradient(
-                                  colors: widget.isVip
+                                  colors: _isVipLogic
                                       ? [
                                     Colors.white.withOpacity(0.10),
                                     Colors.white.withOpacity(0.04),
@@ -434,6 +476,7 @@ class _ResultScreenState extends State<ResultScreen>
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
+
                               ),
 
                               child: SingleChildScrollView(
@@ -464,7 +507,7 @@ class _ResultScreenState extends State<ResultScreen>
 
                                     _buildAffirmationCard(),
 
-                                    if (widget.isVip) ...[
+                                    if (_isVipLogic)...[
                                       const SizedBox(height: 14),
                                       _buildVipCard(),
                                     ],
@@ -517,7 +560,8 @@ class _ResultScreenState extends State<ResultScreen>
   // -------------------------------------------------------
 
   Widget _buildLogo() {
-    final bool vip = widget.isVip;
+    final bool vip = _isVipLogic;
+
 
     return AnimatedBuilder(
       animation: _pulse,
@@ -587,7 +631,8 @@ class _ResultScreenState extends State<ResultScreen>
 
 
   Widget _buildTitle() {
-    final bool vip = widget.isVip;
+    final bool vip = _isVipLogic;
+
 
     return Text(
       "Your AI Lotto X Pattern",
@@ -614,7 +659,8 @@ class _ResultScreenState extends State<ResultScreen>
 
 
   Widget _buildSubtitle() {
-    final bool vip = widget.isVip;
+    final bool vip = _isVipLogic;
+
 
     return Text(
       "${widget.lotteryName} • ${vip ? "VIP Mode" : "Standard"}",
@@ -640,7 +686,7 @@ class _ResultScreenState extends State<ResultScreen>
 
   // 🔷 Glass header bar instead of red pill
   Widget _buildLotteryHeaderBar() {
-    final bool vip = widget.isVip;
+    final bool vip = _isVipLogic;
 
     final Color vipAccent = const Color(0xFF00FEFC); // cyan
     final Color vipAccentSoft = const Color(0xFF72FFD6); // mint
@@ -789,13 +835,12 @@ class _ResultScreenState extends State<ResultScreen>
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: widget.isVip
-              ? _accentSoft.withOpacity(0.45)
-              : Colors.white.withOpacity(0.16),
-          width: widget.isVip ? 1.4 : 1.0,
+          color: _isVipLogic ? _accentSoft.withOpacity(0.45) : Colors.white.withOpacity(0.16),
+          width: _isVipLogic ? 1.4 : 1.0,
+
         ),
         gradient: LinearGradient(
-          colors: widget.isVip
+          colors: _isVipLogic
               ? [
             Colors.white.withOpacity(0.16),
             Colors.white.withOpacity(0.06),
@@ -807,6 +852,7 @@ class _ResultScreenState extends State<ResultScreen>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
+
       ),
 
       child: SizedBox(
@@ -994,19 +1040,20 @@ class _ResultScreenState extends State<ResultScreen>
 
 
   Widget _buildMainNumbers() {
-    final bool vip = widget.isVip;
-    final String mode = widget.vipMode ?? "Pure Random";
+    final bool vip = _isVipLogic;
+    final String mode = _isVipLogic ? (widget.vipMode ?? "Pure Random") : "Pure Random";
+
 
     // Make a modifiable copy
     final List<int> nums = List<int>.from(widget.mainNumbers);
 
     // VIP MODE: Balanced Spread → visually sorted only
-    if (vip && mode == "Balanced Spread") {
+    if (_isVipLogic && mode =="Balanced Spread") {
       nums.sort();
     }
 
     // VIP MODE: Signature Set → bigger orbs + softer glow
-    if (vip && mode == "Signature Set") {
+    if (_isVipLogic && mode =="Signature Set") {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1041,7 +1088,7 @@ class _ResultScreenState extends State<ResultScreen>
     }
 
     // VIP MODE: High-Energy Layout → glowing line behind orbs
-    if (vip && mode == "High-Energy Layout") {
+    if (_isVipLogic && mode =="High-Energy Layout") {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1122,14 +1169,15 @@ class _ResultScreenState extends State<ResultScreen>
 
 
   Widget _buildBonusNumbers() {
-    final bool vip = widget.isVip;
-    final String mode = widget.vipMode ?? "Pure Random";
+    final bool vip = _isVipLogic;
+    final String mode = _isVipLogic ? (widget.vipMode ?? "Pure Random") : "Pure Random";
+
 
     // Make a modifiable copy (for VIP sorted modes if needed)
     final List<int> nums = List<int>.from(widget.bonusNumbers);
 
     // VIP MODE: Balanced Spread → sorted visually
-    if (vip && mode == "Balanced Spread") {
+    if (_isVipLogic && mode =="Balanced Spread") {
       nums.sort();
     }
 

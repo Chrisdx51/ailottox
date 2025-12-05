@@ -346,12 +346,17 @@ class _AILottoXInputScreenState extends State<AILottoXInputScreen>
       body: LiquidBackground(
         child: Column(
           children: [
-            // ⭐ Banner at the TOP — Always in the correct position
+            // ⭐ Banner safely below the device status bar
             if (!isVip && _isBannerReady)
-              SizedBox(
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
+              SafeArea(
+                top: true,
+                bottom: false,
+                child: SizedBox(
+                  height: _bannerAd!.size.height.toDouble(),
+                  child: AdWidget(ad: _bannerAd!),
+                ),
               ),
+
 
             // ⭐ Page content scrolls under the banner cleanly
             Expanded(

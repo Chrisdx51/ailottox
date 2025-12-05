@@ -6,6 +6,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:audioplayers/audioplayers.dart';
 
 import '../main.dart';
 import '../models/user_profile.dart';
@@ -45,6 +46,9 @@ class _GeneratorScreenState extends State<GeneratorScreen>
 
   bool _isLoading = false;
   String? _errorMessage;
+
+
+  final AudioPlayer _sfxPlayer = AudioPlayer();
 
   late AnimationController _glow;
 
@@ -98,10 +102,25 @@ class _GeneratorScreenState extends State<GeneratorScreen>
   }
 
   Future<void> _handleGenerateTap() async {
+    _sfxPlayer.play(AssetSource('audio/tap.mp3'));
+
+
     if (!widget.isVip && !isVip && _isInterstitialReady) {
+      _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
+        onAdDismissedFullScreenContent: (ad) async {
+          await _generate();            // ⭐ generate AFTER ad closes
+        },
+        onAdFailedToShowFullScreenContent: (ad, error) async {
+          await _generate();            // still generate
+        },
+      );
+
       _interstitialAd!.show();
+      return;                           // ⭐ stop here
     }
-    await _generate();
+
+    await _generate();                  // VIP or no ad → normal
+
   }
 
   Future<void> _generate() async {
